@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>부산 브이로그 관광지별 형용사 분석</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    max-width: 720px; margin: 60px auto; padding: 0 20px;
+    color: #1f2328; background: #ffffff;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  p.sub { color: #57606a; margin-top: 0; }
+  textarea {
+    width: 100%; min-height: 160px; box-sizing: border-box;
+    font-family: ui-monospace, Consolas, monospace; font-size: 14px;
+    padding: 12px; border: 1px solid #d0d7de; border-radius: 8px;
+    resize: vertical;
+  }
+  button {
+    margin-top: 14px; padding: 10px 22px; font-size: 15px;
+    background: #1f6feb; color: white; border: none; border-radius: 8px;
+    cursor: pointer;
+  }
+  button:hover { background: #1a5fd0; }
+  .error {
+    background: #ffebe9; border: 1px solid #ff8182; color: #82071e;
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 16px;
+  }
+  .hint { font-size: 13px; color: #57606a; margin-top: 8px; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0d1117; color: #e6edf3; }
+    p.sub, .hint { color: #8b949e; }
+    textarea { background: #161b22; color: #e6edf3; border-color: #30363d; }
+    .error { background: #3d1418; border-color: #6e2129; color: #ff8182; }
+  }
+</style>
+</head>
+<body>
+  <h1>부산 브이로그 관광지별 형용사 분석</h1>
+  <p class="sub">외국인 여행 브이로그 유튜브 링크를 붙여넣으면, 언급된 관광지마다 어떤 영어 형용사가 얼마나 쓰였는지 분석합니다.</p>
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('analyze_route') }}">
+    <textarea name="urls" placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX&#10;https://www.youtube.com/watch?v=YYYYYYYYYYY&#10;(한 줄에 하나씩, 여러 개 가능)"></textarea>
+    <div class="hint">한 줄에 링크 하나씩, 최대 {{ max_urls }}개까지 입력할 수 있습니다. 자막이 없는 영상은 자동으로 건너뜁니다.</div>
+    <button type="submit">분석 시작</button>
+  </form>
+</body>
+</html>

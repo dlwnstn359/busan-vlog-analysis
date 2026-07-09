@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>분석 결과 - 부산 브이로그 형용사 분석</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    max-width: 860px; margin: 40px auto; padding: 0 20px;
+    color: #1f2328; background: #ffffff;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  h2 { font-size: 1.1rem; margin-top: 32px; }
+  a.back { display: inline-block; margin-top: 20px; color: #1f6feb; text-decoration: none; }
+  a.back:hover { text-decoration: underline; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 14px; }
+  th, td { border: 1px solid #d0d7de; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #f6f8fa; }
+  .status-manual { color: #1a7f37; font-weight: 600; }
+  .status-auto { color: #9a6700; font-weight: 600; }
+  .status-no_captions, .status-error { color: #82071e; font-weight: 600; }
+  .place-card {
+    border: 1px solid #d0d7de; border-radius: 10px; padding: 14px 18px;
+    margin-top: 14px;
+  }
+  .place-name { font-size: 1.05rem; font-weight: 700; }
+  .place-meta { color: #57606a; font-size: 13px; margin-bottom: 8px; }
+  .adj-tag {
+    display: inline-block; background: #ddf4ff; color: #0969da;
+    border-radius: 999px; padding: 3px 10px; margin: 3px 4px 0 0; font-size: 13px;
+  }
+  .adj-count { color: #57606a; }
+  .empty { color: #57606a; font-style: italic; }
+  .btn {
+    display: inline-block; margin-top: 4px; padding: 8px 16px;
+    background: #1f6feb; color: white; border-radius: 8px; text-decoration: none; font-size: 14px;
+  }
+  .btn:hover { background: #1a5fd0; }
+  details { margin-top: 24px; }
+  summary { cursor: pointer; color: #57606a; }
+  pre.log {
+    background: #f6f8fa; border-radius: 8px; padding: 12px; font-size: 12px;
+    white-space: pre-wrap; max-height: 300px; overflow-y: auto;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0d1117; color: #e6edf3; }
+    th { background: #161b22; }
+    th, td { border-color: #30363d; }
+    .place-card { border-color: #30363d; }
+    .place-meta, .adj-count, summary, .empty { color: #8b949e; }
+    .adj-tag { background: #0d2d4a; color: #79c0ff; }
+    pre.log { background: #161b22; }
+  }
+</style>
+</head>
+<body>
+  <h1>분석 결과</h1>
+
+  <h2>영상별 자막 확보 현황</h2>
+  <table>
+    <tr><th>제목</th><th>상태</th><th>URL</th></tr>
+    {% for d in downloads %}
+    <tr>
+      <td>{{ d.title or "(정보 조회 실패)" }}</td>
+      <td class="status-{{ d.status }}">
+        {% if d.status == "manual" %}수동 자막 사용
+        {% elif d.status == "auto" %}자동생성 자막 사용
+        {% elif d.status == "no_captions" %}영어 자막 없음 (제외됨)
+        {% else %}오류 (제외됨)
+        {% endif %}
+      </td>
+      <td><a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.url }}</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h2>관광지별 형용사 빈도</h2>
+  {% if attractions %}
+    {% if has_csv %}
+      <a class="btn" href="{{ url_for('download_csv', run_id=run_id) }}">CSV로 전체 결과 다운로드</a>
+    {% endif %}
+    {% for a in attractions %}
+      <div class="place-card">
+        <div class="place-name">{{ a.name }}</div>
+        <div class="place-meta">언급 {{ a.mentions }}회 · 영상 {{ a.video_count }}개</div>
+        {% if a.adjectives %}
+          {% for adj, count in a.adjectives %}
+            <span class="adj-tag">{{ adj }} <span class="adj-count">{{ count }}</span></span>
+          {% endfor %}
+        {% else %}
+          <span class="empty">주변에서 감지된 형용사 없음</span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="empty">분석할 수 있는 자막을 가진 영상이 없어서 결과가 없습니다. 위 표에서 자막 확보 현황을 확인하세요.</p>
+  {% endif %}
+
+  <details>
+    <summary>처리 로그 보기</summary>
+    <pre class="log">{{ log_text }}</pre>
+  </details>
+
+  <a class="back" href="{{ url_for('index') }}">&larr; 다른 영상 분석하기</a>
+</body>
+</html>

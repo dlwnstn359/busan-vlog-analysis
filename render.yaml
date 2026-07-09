@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: busan-vlog-analysis
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python -m spacy download en_core_web_sm
+    # workers=1: RUN_RESULTS/CSV 다운로드 링크가 프로세스 메모리에만 있어 워커가 늘면 깨짐
+    startCommand: gunicorn --workers 1 --timeout 300 --bind 0.0.0.0:$PORT webapp.app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
