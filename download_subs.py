@@ -19,6 +19,16 @@ SUBS_DIR = os.path.join(BASE_DIR, "subs")
 # en-orig 등 변형 코드를 포함해 최대한 넓게 영어 자막을 잡는다
 LANGS = ["en", "en-US", "en-GB", "en-orig", "en.*"]
 
+# 클라우드 서버 IP는 유튜브 봇 탐지에 걸리는 경우가 많아, 로그인 쿠키 파일이 있으면 함께 사용한다.
+# Render의 Secret Files 기능으로 올리면 /etc/secrets/<파일명> 경로에 마운트된다.
+COOKIES_FILE = os.environ.get("YTDLP_COOKIES_FILE", "/etc/secrets/cookies.txt")
+
+
+def _cookie_opts():
+    if COOKIES_FILE and os.path.isfile(COOKIES_FILE):
+        return {"cookiefile": COOKIES_FILE}
+    return {}
+
 
 def read_urls(urls_file=URLS_FILE):
     urls = []
@@ -47,6 +57,7 @@ def download(url, subs_dir, auto):
         "quiet": True,
         "no_warnings": True,
         "ignoreerrors": True,
+        **_cookie_opts(),
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.extract_info(url, download=True)
@@ -64,7 +75,7 @@ def download_urls(urls, subs_dir, log=print):
     for url in urls:
         log(f"\n=== {url} ===")
         try:
-            with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True, "no_warnings": True}) as probe:
+            with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True, "no_warnings": True, **_cookie_opts()}) as probe:
                 info = probe.extract_info(url, download=False)
             video_id = info["id"]
             title = info.get("title", "")
