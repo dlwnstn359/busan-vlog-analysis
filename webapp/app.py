@@ -44,8 +44,11 @@ def index():
     return render_template("index.html", max_urls=MAX_URLS)
 
 
-@app.route("/analyze", methods=["POST"])
+@app.route("/analyze", methods=["GET", "POST"])
 def analyze_route():
+    if request.method == "GET":
+        return redirect(url_for("index"))
+
     urls = parse_urls(request.form.get("urls", ""))
     if not urls:
         return render_template("index.html", max_urls=MAX_URLS, error="유튜브 링크를 최소 1개 입력하세요.")
