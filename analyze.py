@@ -14,6 +14,9 @@ import re
 from collections import Counter, defaultdict
 
 import spacy
+from spacy.matcher import PhraseMatcher
+from spacy.tokens import Span
+from spacy.util import filter_spans
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TRANSCRIPTS_DIR = os.path.join(BASE_DIR, "transcripts")
@@ -38,7 +41,54 @@ MIN_MENTIONS = 2     # 이 횟수 미만으로 언급된 지명은 요약에서 
 LEADING_ARTICLE_RE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
 PUNCT_STRIP_RE = re.compile(r"[\"'.,!?;:]+$")
 
+# 관광지가 아니라 배경 지명(여행지 자체, 출발/경유 도시, 국가·국적)이라서 분석 대상에서 제외한다.
+# 브이로거의 출신 국가가 어디든 "나라 이름 자체"는 관광지가 아니므로 흔한 국가/국적을 폭넓게 걸러낸다.
+EXCLUDED_PLACES = {
+    "korea", "south korea", "north korea", "korean", "koreans", "seoul", "busan", "asia",
+    "canada", "canadian", "usa", "u.s.", "u.s.a.", "united states", "america", "american",
+    "uk", "united kingdom", "britain", "england", "british", "scotland", "ireland", "irish",
+    "australia", "australian", "new zealand", "japan", "japanese", "china", "chinese",
+    "taiwan", "hong kong", "singapore", "malaysia", "thailand", "vietnam", "philippines",
+    "indonesia", "india", "germany", "german", "france", "french", "italy", "italian",
+    "spain", "spanish", "russia", "russian", "mexico", "mexican", "brazil", "europe",
+}
+
+# 자동생성 자막은 대문자 표기가 없어 spaCy NER이 잘 아는 국가/대도시 이름(seoul, korea 등)만
+# 잡아내고 정작 "haeundae beach" 같은 실제 명소는 놓치는 경우가 많다. 그래서 부산 명소는
+# 별칭 목록으로 직접 매칭해 소문자 자막에서도 확실히 잡는다.
+BUSAN_ATTRACTIONS = {
+    "Haeundae Beach": ["haeundae beach", "haeundae"],
+    "Gwangalli Beach": ["gwangalli beach", "gwangalli"],
+    "Jagalchi Market": ["jagalchi market", "jagalchi fish market", "jagalchi"],
+    "Gamcheon Culture Village": ["gamcheon culture village", "gamcheon village", "gamcheon"],
+    "Taejongdae": ["taejongdae"],
+    "Yongdusan Park": ["yongdusan park"],
+    "Busan Tower": ["busan tower"],
+    "Dongbaek Island": ["dongbaek island", "apec house"],
+    "Songjeong Beach": ["songjeong beach"],
+    "Songdo Beach": ["songdo beach"],
+    "Dadaepo Beach": ["dadaepo beach"],
+    "Haedong Yonggungsa Temple": ["haedong yonggungsa", "yonggungsa temple", "yonggungsa"],
+    "Beomeosa Temple": ["beomeosa temple", "beomeosa"],
+    "Oryukdo": ["oryukdo"],
+    "Igidae": ["igidae", "igidae park"],
+    "BIFF Square": ["biff square"],
+    "Nampo-dong": ["nampo-dong", "nampodong"],
+    "Seomyeon": ["seomyeon"],
+    "Centum City": ["centum city"],
+    "Gukje Market": ["gukje market", "international market"],
+    "Bupyeong Kkangtong Market": ["bupyeong market", "kkangtong market", "bupyeong kkangtong market"],
+    "Songdo Cable Car": ["songdo cable car", "songdo skywalk"],
+    "Haeundae Blueline Park": ["blueline park", "haeundae sky capsule"],
+    "Ibagu-gil": ["ibagu-gil", "ibagu gil", "168 steps"],
+}
+# NER 루프와 매처 루프가 같은 명소를 중복 집계하지 않도록, 별칭에 해당하는 표현은 NER 쪽에서 제외한다.
+GAZETTEER_ALIASES = {alias for aliases in BUSAN_ATTRACTIONS.values() for alias in aliases} | {
+    name.lower() for name in BUSAN_ATTRACTIONS
+}
+
 _NLP = None
+_MATCHER = None
 
 
 def get_nlp():
@@ -47,6 +97,18 @@ def get_nlp():
     if _NLP is None:
         _NLP = spacy.load("en_core_web_sm")
     return _NLP
+
+
+def get_matcher():
+    """부산 명소 별칭 매처도 프로세스당 한 번만 만들어서 재사용한다."""
+    global _MATCHER
+    if _MATCHER is None:
+        nlp = get_nlp()
+        matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
+        for canonical, aliases in BUSAN_ATTRACTIONS.items():
+            matcher.add(canonical, [nlp.make_doc(alias) for alias in aliases])
+        _MATCHER = matcher
+    return _MATCHER
 
 
 def normalize_place(text):
@@ -89,6 +151,7 @@ def compute_place_adjectives(texts, log=print):
       place_videos   : {attraction: {video_id, ...}}
     """
     nlp = get_nlp()
+    matcher = get_matcher()
 
     place_adjs = defaultdict(Counter)
     place_mentions = Counter()
@@ -104,20 +167,27 @@ def compute_place_adjectives(texts, log=print):
             if tok.pos_ == "ADJ" and tok.is_alpha
         ]
 
+        def collect(place, start, end):
+            place_mentions[place] += 1
+            place_videos[place].add(video_id)
+            lo, hi = start - WINDOW, end + WINDOW
+            for i, lemma in adj_positions:
+                if lo <= i < hi:
+                    place_adjs[place][lemma] += 1
+
         for ent in doc.ents:
             if not is_place_entity(ent, doc):
                 continue
             place = normalize_place(ent.text)
             if len(place) < 2:
                 continue
+            if place.lower() in EXCLUDED_PLACES or place.lower() in GAZETTEER_ALIASES:
+                continue
+            collect(place, ent.start, ent.end)
 
-            place_mentions[place] += 1
-            place_videos[place].add(video_id)
-
-            lo, hi = ent.start - WINDOW, ent.end + WINDOW
-            for i, lemma in adj_positions:
-                if lo <= i < hi:
-                    place_adjs[place][lemma] += 1
+        gazetteer_spans = [Span(doc, s, e, label=mid) for mid, s, e in matcher(doc)]
+        for span in filter_spans(gazetteer_spans):
+            collect(nlp.vocab.strings[span.label], span.start, span.end)
 
     return place_adjs, place_mentions, place_videos
 
